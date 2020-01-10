@@ -31,18 +31,21 @@ The `img0` is an original image while the `img` is the pre-processed one. The or
 
 Then `df.iloc[idx, 1:].values` convert the values stored in the dataframe columns into numpy array. It is ok to go with this, but it has to be reshaped into 2d array if you want to leverage some CNN models. This can be done by `reshape` method with `HEIGHT` and `WIDTH` parameters. `HEIGHT` * `WIDTH` is the exact same number of the number of columns.
 
-
+The reason for subtracting pixel values from `255` is that the original image is kind of being inverted. The background color is white which is near `255` or `#ffffff`value. It is possible to use it directly, but two high numbers are not so good to train the model. Instead the interesting pixels (like where the number image is) should have higher value.
 
 <img src="./img1.png"/>
+
+After retrieving the image pixel array from the dataframe, we can crop and resize the image. The main purpose of this task could be described with the Picture above. The hand written character in the original image is not centered, and there are plenty of marginal space which is useless for this kind of data. It is better to cut the unnecessary space and position the character part centered.
 
 ```python
 def get_crop_resize(img0):
     #normalize each image by its max val
     img = (img0*(255.0/img0.max())).astype(np.uint8) 
     img = crop_resize(img) 
-    
     return img
 ```
+
+Inside the `get_crop_resize` function, the actual cropping and resizeing function is located. That is where the actual process gets happened via `crop_resize` function. `(img0*(255.0/img0.max()))` part is just normalization process. (not sure yet). Let's inspect the `crop_resize` function in more detail.
 
 ```python
 def crop_resize(img0, size=SIZE, pad=16):
@@ -50,6 +53,8 @@ def crop_resize(img0, size=SIZE, pad=16):
     img = padded_img(img, lx, ly, pad)
     return cv2.resize(img,(size,size))
 ```
+
+As you can see, `crop_resize` function does three things. First, make the image cropped. Second, some small background pixels are padded to give some room for the image. Lastly, the image gets resized to make sure every images are in the same size.
 
 ```python
 def cropped_img(img0, thres=80):
