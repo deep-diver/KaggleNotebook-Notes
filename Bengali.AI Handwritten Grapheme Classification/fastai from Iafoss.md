@@ -29,7 +29,7 @@ plt.show()
 
 The `img0` is an original image while the `img` is the pre-processed one. The original data has a number of columns, and the very first column is used to indicate image ids. In such sense, it is possible to collect every columns except for the first one via `df.iloc[idx, 1:]`. That is we could retrieve every pixel values of a specific `idx`-th image.
 
-Then `df.iloc[idx, 1:].values` convert the values stored in the dataframe columns into numpy array. It is ok to go with this, but it has to be reshaped into 2d array if you want to leverage some CNN models. This can be done by `reshape` method with `HEIGHT` and `WIDTH` parameters. `HEIGHT` * `WIDTH` is the exact same number of the number of columns.
+Then `df.iloc[idx, 1:].values` convert the values stored in the dataframe columns into numpy array (the same thing could be done with `to_numpy` method). It is ok to go with this, but it has to be reshaped into 2d array if you want to leverage some CNN models. This can be done by `reshape` method with `HEIGHT` and `WIDTH` parameters. `HEIGHT` * `WIDTH` is the exact same number of the number of columns.
 
 The reason for subtracting pixel values from `255` is that the original image is kind of being inverted. The background color is white which is near `255` or `#ffffff`value. It is possible to use it directly, but two high numbers are not so good to train the model. Instead the interesting pixels (like where the number image is) should have higher value.
 
@@ -54,7 +54,7 @@ def crop_resize(img0, size=SIZE, pad=16):
     return cv2.resize(img,(size,size))
 ```
 
-As you can see, `crop_resize` function does three things. First, make the image cropped. Second, some small background pixels are padded to give some room for the image. Lastly, the image gets resized to make sure every images are in the same size.
+As you can see, `crop_resize` function does three things. First, make the image cropped. Second, some small background pixels are padded to to make sure every images are in the same size. For instance, if the height is longer than width, the width will be padded to expand the size. Lastly, the image gets resized to become a desired size.
 
 ```python
 def cropped_img(img0, thres=80):
@@ -73,6 +73,12 @@ def cropped_img(img0, thres=80):
     return img, lx, ly
 ```
 
+Let's look into the `cropped_img` function. The `bbox` function will be explained shortly, but the returned values are the indicies where the pixel value is above the `thres`. Since there could be some noisy values, the `thres` is set to `80` here. So, `ymin` and `ymax` are the pixel location of bottom and top respectively where the value exceeds 80. Likewise, `xmin` and `xmax` are the pixel location of left and right.
+
+The four lines of code with `+/-13` and `+/-10` things are attempts to give some extra space so that the charater of the image can be centered. It will prevent the character from being located at the exact corners.
+
+`img[img < 28] = 0` erase some noisy pixel values. Finally, `lx` and `ly` is the size of width and height. The same thing could be achieved via `img.shape` I guess. These values will be used to determine which size should be padded and how much in `padded_img` function below.
+
 ```python
 def padded_img(img, lx, ly, pad):
     l = max(lx,ly) + pad
@@ -80,6 +86,26 @@ def padded_img(img, lx, ly, pad):
 
     return img
 ```
+
+`padded_img` function performs padding. First, `max(ly, ly)` deteremines wheter width or height should be padded more. `+pad` gives more space additionally. You can get some sense what np.pad does through the following exmaple.
+
+```
+>>> a = [[1, 2], [3, 4]]
+>>> np.pad(a, ((3, ), (2, )), mode='constant')
+array([[0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0],
+       [0, 0, 1, 2, 0, 0],
+       [0, 0, 3, 4, 0, 0],
+       [0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0])
+```
+
+The original values were `[[1,2],[3,4]]`, and you could find it on the center of the resuling array. As you can see, three rows are added to the top and bottom, and two columns are added to the left and right to surroung the original values.
+
+In this sense, `np.pad(img, [((l-ly)//2,), ((l-lx)//2,)], mode='constant')` pads evenly to the every directions (note `//2` operation). When mode is `constant` the padded values are `0`. 
+
 
 ```python
 def bbox(img):
@@ -89,5 +115,17 @@ def bbox(img):
     cmin, cmax = np.where(cols)[0][[0, -1]]
     return rmin, rmax, cmin, cmax
 ```
+
+The last function we will look at is `bbox`. Remeber this function was used in the first line of the `crop_resize` function. The input parameter `img` is not an actual image, but it is assumed to be an boolean array with the same size to the original image. In such array, we could find easily where the pixels of our interests are located, and that is done with `np.where` functionality.  
+
+`np.where` returns the indices of array indicating the location where the `True` values are. `np.where(rows)[0]`'s [0] is just to access the array. `[[0, -1]]` thing will give you the first and the last indices from the array. So you now know the location of the starting pixel for the character.
+
+### References
+- [Apache Parquet](http://parquet.apache.org/)
+- [Pandas pd.read_parquet](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_parquet.html)
+- [Pandas Series values property](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.values.html)
+- [np.pad](https://docs.scipy.org/doc/numpy/reference/generated/numpy.pad.html)
+- [np.any](https://docs.scipy.org/doc/numpy/reference/generated/numpy.any.html)
+- [np.where](https://docs.scipy.org/doc/numpy/reference/generated/numpy.where.html)
 
 # Modelling
