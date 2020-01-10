@@ -1,13 +1,22 @@
+# Data Pre-processing
+
+The images are stored in a columnar data format, `parquet`. It is like CSV, but it is a specialized format for columnar data to achieve higher performance. `Pandas` provides a handy `read_parquet` method read this file.
+
 ```python
-df = pd.read_parquet(TRAIN[0]) 
+df = pd.read_parquet(TRAIN[0])
 ```
+
+## Display images 
+
+The following code block is about plotting an original and pre-processed images on the left and the right sides respectively. The `subplots` method creates `n_imgs` * 2 numbers of sub-plots. The number of rows and columns are indicated by the `1st` and `2nd` parameters respectively. The `figsize` parameter determines the size of the entire plot in `inch`. The size has to be specified with width and height in order.
 
 ```python
 n_imgs   = 8                         
 fig, axs = plt.subplots(n_imgs, 2, figsize=(10, 5*n_imgs))
 
 for idx in range(n_imgs):
-    img = get_crop_resize(df, idx)
+    img0 = 255 - df.iloc[idx, 1:].values.reshape(HEIGHT, WIDTH).astype(uint8)
+    img = get_crop_resize(img0)
 
     axs[idx,0].imshow(img0, cmap='gray')
     axs[idx,0].set_title('Original image') 
@@ -18,13 +27,16 @@ for idx in range(n_imgs):
 plt.show()
 ```
 
+The `img0` is an original image while the `img` is the pre-processed one. The original data has a number of columns, and the very first column is used to indicate image ids. In such sense, it is possible to collect every columns except for the first one via `df.iloc[idx, 1:]`. That is we could retrieve every pixel values of a specific `idx`-th image.
+
+Then `df.iloc[idx, 1:].values` convert the values stored in the dataframe columns into numpy array. It is ok to go with this, but it has to be reshaped into 2d array if you want to leverage some CNN models. This can be done by `reshape` method with `HEIGHT` and `WIDTH` parameters. `HEIGHT` * `WIDTH` is the exact same number of the number of columns.
+
+
+
 <img src="./img1.png"/>
 
 ```python
-def get_crop_resize(df, idx):
-    img0 = df.iloc[idx, 1:].values.reshape(HEIGHT, WIDTH)
-    img0 = 255 - img0.astype(np.uint8)
-
+def get_crop_resize(img0):
     #normalize each image by its max val
     img = (img0*(255.0/img0.max())).astype(np.uint8) 
     img = crop_resize(img) 
@@ -72,3 +84,5 @@ def bbox(img):
     cmin, cmax = np.where(cols)[0][[0, -1]]
     return rmin, rmax, cmin, cmax
 ```
+
+# Modelling
