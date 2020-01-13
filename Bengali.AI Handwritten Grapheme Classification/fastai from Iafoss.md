@@ -130,38 +130,51 @@ The last function we will look at is `bbox`. Remeber this function was used in t
 - [np.any](https://docs.scipy.org/doc/numpy/reference/generated/numpy.any.html)
 - [np.where](https://docs.scipy.org/doc/numpy/reference/generated/numpy.where.html)
 
+### What I don't fully understand
+- Standardization v.s. Normalization
+- Methods for Normalization
+
 # Modelling
 
+Before modelling, we need to set some fixed parameters like `batch_size` and `size` for the image size. Also `TRAIN` and `LABELS` simply reference the locations where the training images and labeling information files are respectively. `arch` means the model architecture, so one or the most popular one, `DenseNet121` will be used to train. `nfolds` and `fold` are to determine the index to split between training and validation datasets.
+
 ```python
-sz = 128
-bs = 128
-nfolds = 4 #keep the same split as the initial dataset
-fold = 0
+size        = 128
+batch_size  = 128
 
-TRAIN = '../input/grapheme-imgs-128x128/'
-LABELS = '../input/bengaliai-cv19/train.csv'
+nfolds      = 4 
+fold        = 0
 
-arch = models.densenet121
+TRAIN       = '../input/grapheme-imgs-128x128/'
+LABELS      = '../input/bengaliai-cv19/train.csv'
+
+arch        = models.densenet121
 ```
+
+First of all, there are two options for building a model. One is to simply use an existing one by expanding the only channel to three. Another option is to convert an existing one to embrace 1 channel image. In this note, the latter case is covered (the original architecture of DenseNet121 takes three channels).
 
 ## Getting unique labels
 
 ```python
-df = pd.read_csv(LABELS)
+df      = pd.read_csv(LABELS)
 nunique = list(df.nunique())[1:-1]
-print(nunique)
-df.head()
 ```
 
 ## Building a DataBunch
 ```python
 stats = ([0.0692], [0.2051])
+
 data = (ImageList.from_df(df, path='.', folder=TRAIN, suffix='.png', 
-        cols='image_id', convert_mode='L')
-        .split_by_idx(range(fold*len(df)//nfolds,(fold+1)*len(df)//nfolds))
-        .label_from_df(cols=['grapheme_root','vowel_diacritic','consonant_diacritic'])
-        .transform(get_transforms(do_flip=False,max_warp=0.1), size=sz, padding_mode='zeros')
-        .databunch(bs=bs)).normalize(stats)
+                          cols='image_id', convert_mode='L')
+                 .split_by_idx(range(fold*len(df)//nfolds,
+                                     (fold+1)*len(df)//nfolds))
+                 .label_from_df(cols=['grapheme_root',
+                                      'vowel_diacritic',
+                                      'consonant_diacritic'])
+                 .transform(get_transforms(do_flip=False, max_warp=0.1), 
+                            size=sz, padding_mode='zeros')
+                 .databunch(bs=bs))
+        .normalize(stats)
 
 data.show_batch()
 ```
@@ -172,8 +185,9 @@ class Head(nn.Module):
     def __init__(self, nc, n, ps=0.5):
         super().__init__()
         layers = [AdaptiveConcatPool2d(), Mish(), Flatten()] + \
-            bn_drop_lin(nc*2, 512, True, ps, Mish()) + \
-            bn_drop_lin(512, n, True, ps)
+                  bn_drop_lin(nc*2, 512, True, ps, Mish()) + \
+                  bn_drop_lin(512, n, True, ps)
+                  
         self.fc = nn.Sequential(*layers)
         self._init_weight()
         
@@ -194,9 +208,9 @@ class Dnet_1ch(nn.Module):
         super().__init__()
         m = arch(True) if pre else arch()
         
-        conv = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        w = (m.features.conv0.weight.sum(1)).unsqueeze(1)
-        conv.weight = nn.Parameter(w)
+        conv        = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        weight      = (m.features.conv0.weight.sum(1)).unsqueeze(1)
+        conv.weight = nn.Parameter(weight)
         
         self.layer0 = nn.Sequential(conv, m.features.norm0, nn.ReLU(inplace=True))
         self.layer1 = nn.Sequential(
@@ -211,8 +225,6 @@ class Dnet_1ch(nn.Module):
         self.head1 = Head(nc,n[0])
         self.head2 = Head(nc,n[1])
         self.head3 = Head(nc,n[2])
-        #to_Mish(self.layer0), to_Mish(self.layer1), to_Mish(self.layer2)
-        #to_Mish(self.layer3), to_Mish(self.layer4)
         
     def forward(self, x):    
         x = self.layer0(x)
@@ -236,10 +248,13 @@ class Loss_combine(nn.Module):
         
     def forward(self, input, target,reduction='mean'):
         x1,x2,x3 = input
-        x1,x2,x3 = x1.float(),x2.float(),x3.float()
+        x1,x2,x3 = x1.float(), x2.float(), x3.float()
+        
         y = target.long()
-        return 0.7*F.cross_entropy(x1,y[:,0],reduction=reduction) + 0.1*F.cross_entropy(x2,y[:,1],reduction=reduction) + \
-          0.2*F.cross_entropy(x3,y[:,2],reduction=reduction)
+        
+        return 0.7*F.cross_entropy(x1,y[:,0],reduction=reduction) + 
+               0.1*F.cross_entropy(x2,y[:,1],reduction=reduction) +
+               0.2*F.cross_entropy(x3,y[:,2],reduction=reduction)
 ```
 
 ## Building Custom Metrics
@@ -247,11 +262,11 @@ class Loss_combine(nn.Module):
 class Metric_idx(Callback):
     def __init__(self, idx, average='macro'):
         super().__init__()
-        self.idx = idx
-        self.n_classes = 0
-        self.average = average
-        self.cm = None
-        self.eps = 1e-9
+        self.idx        = idx
+        self.n_classes  = 0
+        self.average    = average
+        self.cm         = None
+        self.eps        = 1e-9
         
     def on_epoch_begin(self, **kwargs):
         self.tp = 0
@@ -261,14 +276,16 @@ class Metric_idx(Callback):
     def on_batch_end(self, last_output:Tensor, last_target:Tensor, **kwargs):
         last_output = last_output[self.idx]
         last_target = last_target[:,self.idx]
-        preds = last_output.argmax(-1).view(-1).cpu()
-        targs = last_target.long().cpu()
+        preds       = last_output.argmax(-1).view(-1).cpu()
+        targs       = last_target.long().cpu()
         
         if self.n_classes == 0:
-            self.n_classes = last_output.shape[-1]
-            self.x = torch.arange(0, self.n_classes)
-        cm = ((preds==self.x[:, None]) & (targs==self.x[:, None, None])) \
-          .sum(dim=2, dtype=torch.float32)
+            self.n_classes  = last_output.shape[-1]
+            self.x          = torch.arange(0, self.n_classes)
+            
+        cm = ( (preds==self.x[:, None]) & (targs==self.x[:, None, None]) )
+             .sum(dim=2, dtype=torch.float32)
+             
         if self.cm is None: self.cm =  cm
         else:               self.cm += cm
 
@@ -298,26 +315,26 @@ class Metric_idx(Callback):
     def on_epoch_end(self, last_metrics, **kwargs): 
         return add_metrics(last_metrics, self._recall())
     
-Metric_grapheme = partial(Metric_idx,0)
-Metric_vowel = partial(Metric_idx,1)
-Metric_consonant = partial(Metric_idx,2)
+Metric_grapheme     = partial(Metric_idx,0)
+Metric_vowel        = partial(Metric_idx,1)
+Metric_consonant    = partial(Metric_idx,2)
 
 class Metric_tot(Callback):
     def __init__(self):
         super().__init__()
-        self.grapheme = Metric_idx(0)
-        self.vowel = Metric_idx(1)
-        self.consonant = Metric_idx(2)
+        self.grapheme   = Metric_idx(0)
+        self.vowel      = Metric_idx(1)
+        self.consonant  = Metric_idx(2)
         
     def on_epoch_begin(self, **kwargs):
-        self.grapheme.on_epoch_begin(**kwargs)
-        self.vowel.on_epoch_begin(**kwargs)
-        self.consonant.on_epoch_begin(**kwargs)
+        self.    grapheme.on_epoch_begin(**kwargs)
+        self.       vowel.on_epoch_begin(**kwargs)
+        self.   consonant.on_epoch_begin(**kwargs)
     
     def on_batch_end(self, last_output:Tensor, last_target:Tensor, **kwargs):
-        self.grapheme.on_batch_end(last_output, last_target, **kwargs)
-        self.vowel.on_batch_end(last_output, last_target, **kwargs)
-        self.consonant.on_batch_end(last_output, last_target, **kwargs)
+        self.    grapheme.on_batch_end(last_output, last_target, **kwargs)
+        self.       vowel.on_batch_end(last_output, last_target, **kwargs)
+        self.   consonant.on_batch_end(last_output, last_target, **kwargs)
         
     def on_epoch_end(self, last_metrics, **kwargs): 
         return add_metrics(last_metrics, 0.5*self.grapheme._recall() +
@@ -447,3 +464,5 @@ learn.fit_one_cycle(32, max_lr=slice(0.2e-2,1e-2), wd=[1e-3,0.1e-1], pct_start=0
     div_factor=100, callbacks = [logger, SaveModelCallback(learn,monitor='metric_tot',
     mode='max',name=f'model_{fold}'),MixUpCallback(learn)])
 ```
+
+## References
