@@ -151,9 +151,18 @@ LABELS      = '../input/bengaliai-cv19/train.csv'
 arch        = models.densenet121
 ```
 
-First of all, there are two options for building a model. One is to simply use an existing one by expanding the only channel to three. Another option is to convert an existing one to embrace 1 channel image. In this note, the latter case is covered (the original architecture of DenseNet121 takes three channels).
-
 ## Training
+
+This post's approach is top to bottom. That means I am going to dig into training part first, and then inspect things such as `DataBunch`, `Model`, `Loss function`, `Metrics`, `Callbacks`, and more that are used in training part in more detail.
+
+By saying that, let's look what training procedure looks like first. 
+
+In order to run training procedure, we need a `Learner`. In `Learner` instance, some parameters are specified. `data` is a `DataBunch` kind of instance. `DataBunch` is a wrapper class for `Datasets` and `DataLoader` in PyTorch. It manages training, validation, and test datasets in one place along with loading process. The actual process to build `DataBunch` will be covered shortly.
+
+`model` is an instance of `Dnet_1ch` class. We will take a look in more detail, but `Dnet_1ch` is a transformed version of DenseNet121. The original DenseNet121 is originally designed to take three channel (RGB) images as an input, but Bangali MNIST dataset is one channel images. So `Dnet_1ch` modifies the first layer so that it could embrace the on channel images.
+
+Another change made in `Dnet_1ch` class is that some additional layers such as fully connected layer are added as the last layers since we are going to perform transfer learning. 
+
 ```python
 model = Dnet_1ch()
 learn = Learner(data, 
@@ -167,6 +176,10 @@ logger = CSVLogger(learn, f'log{fold}')
 learn.clip_grad = 1.0
 learn.split([model.head1])
 ```
+
+The third parameter `loss_func` is used to specify a loss function. A custom loss function is defined, and its name is `Loss_combine`. Bangali MNIST is a multilabel classification problem, so there should be three different outputs to be measured. `Dnet_1ch` model's output actually has three different fully connected layers separately. `Loss_combine` function simply adds up losses from those separate layers.
+
+
 
 ```python
 learn.fit_one_cycle(32, 
@@ -201,6 +214,9 @@ data.show_batch()
 ```
 
 ## Buiilding a Custom Model
+
+First of all, there are two options for building a model. One is to simply use an existing one by expanding the only channel to three. Another option is to convert an existing one to embrace 1 channel image. In this note, the latter case is covered (the original architecture of DenseNet121 takes three channels).
+
 ```python
 df      = pd.read_csv(LABELS)
 nunique = list(df.nunique())[1:-1]
