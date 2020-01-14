@@ -153,12 +153,33 @@ arch        = models.densenet121
 
 First of all, there are two options for building a model. One is to simply use an existing one by expanding the only channel to three. Another option is to convert an existing one to embrace 1 channel image. In this note, the latter case is covered (the original architecture of DenseNet121 takes three channels).
 
-## Getting unique labels
+## Training
+```python
+model = Dnet_1ch()
+learn = Learner(data, 
+                model, 
+                loss_func=Loss_combine(),
+                opt_func=Over9000,
+                metrics=[Metric_grapheme(), Metric_vowel(),
+                         Metric_consonant(),Metric_tot()])
+                         
+logger = CSVLogger(learn, f'log{fold}')
+learn.clip_grad = 1.0
+learn.split([model.head1])
+```
 
 ```python
-df      = pd.read_csv(LABELS)
-nunique = list(df.nunique())[1:-1]
+learn.fit_one_cycle(32, 
+                    max_lr=slice(0.2e-2,1e-2), 
+                    wd=[1e-3,0.1e-1], 
+                    pct_start=0.0, 
+                    div_factor=100, 
+                    callbacks = [logger, 
+                                 MixUpCallback(learn),
+                                 SaveModelCallback(learn, monitor='metric_tot',         
+                                                   mode='max',name=f'model_{fold}')])
 ```
+
 
 ## Building a DataBunch
 ```python
@@ -180,6 +201,11 @@ data.show_batch()
 ```
 
 ## Buiilding a Custom Model
+```python
+df      = pd.read_csv(LABELS)
+nunique = list(df.nunique())[1:-1]
+```
+
 ```python
 class Head(nn.Module):
     def __init__(self, nc, n, ps=0.5):
@@ -239,6 +265,8 @@ class Dnet_1ch(nn.Module):
         
         return x1,x2,x3
 ```
+
+# Loss & Metrics & Callbacks
 
 ## Building a Custom Loss
 ```python
@@ -448,21 +476,6 @@ class MixUpCallback(LearnerCallback):
         if self.stack_y: self.learn.loss_func = self.learn.loss_func.get_old()
 ```
 
-## Training
-```python
-model = Dnet_1ch()
-learn = Learner(data, model, loss_func=Loss_combine(), opt_func=Over9000,
-        metrics=[Metric_grapheme(),Metric_vowel(),Metric_consonant(),Metric_tot()])
-logger = CSVLogger(learn,f'log{fold}')
-learn.clip_grad = 1.0
-learn.split([model.head1])
-learn.unfreeze()
-```
 
-```python
-learn.fit_one_cycle(32, max_lr=slice(0.2e-2,1e-2), wd=[1e-3,0.1e-1], pct_start=0.0, 
-    div_factor=100, callbacks = [logger, SaveModelCallback(learn,monitor='metric_tot',
-    mode='max',name=f'model_{fold}'),MixUpCallback(learn)])
-```
 
 ## References
