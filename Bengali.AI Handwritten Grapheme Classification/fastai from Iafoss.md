@@ -209,7 +209,11 @@ The last argument is to set a number of callbacks. Callbacks in fastai lets you 
 
 ## Building a DataBunch
 
-`DataBunch` is a high level wrapper for PyTorch's Dataset and DataLoader. It holds training, validation, and testing(optional) datasets internally. 
+`DataBunch` is a high level wrapper for PyTorch's Dataset and DataLoader. It holds training, validation, and testing(optional) datasets internally. It could be built from Pandas DataFrame, CSV files, image directories, and so on. 
+
+The code block shows how to create on with `ImageList` class. Some methods like `from_df`, `split_by_idx`, `label_from_df`, , `transform`, and `databunch` are called by chaining. 
+
+`from_df` means that you want to build a DataBunch from Pandas DataFrame. You pass the target dataframe as `df`, and the folder name where the actual images are stored as `folder`, and `suffix` to tell which image format is going to be used. The `cols` argument is used to indicate which columns in the DataFrame have the list of image filenames. `convert_mode` is set to tell if the images are RGB color or grayscale. `L` means the grayscale while `RGB` means the RGB.
 
 ```python
 stats = ([0.0692], [0.2051])
@@ -229,14 +233,27 @@ data = (ImageList.from_df(df, path='.', folder=TRAIN, suffix='.png',
 data.show_batch()
 ```
 
+`split_by_idx` is an method to split the whole dataset into training and validation datasets. The specified range of indicies is used to tell where the validation dataset comes from.
+
+`label_from_df` is an method to specify labels from Pandas DataFrame. You could list multiple labels from multiple columns when you are dealing with multilabel classification task. The code block above means that we are dealing with multilabel classification task, and there are three label kinds, `grapheme_root`, `vowel_diacritic`, and `consonant_diacritic`.
+
+`transform` is an method to specify a set of transformation(augmentation) rules. fastai provides a handy function called `get_transforms`. With it, you just need to pass a number of parameters of how you want to augment your data. Then `get_transforms` will return a list of Transform.
+
+Finally, `databunch` is a method to wrap the whole thing into a `DataBunch`. Nothing special, but you could specify thie batch size. 
+
+After this, when you call `data.show_batch()`, you will see some samples of the data without any matplotlib codes yourself. 
+
+
 ## Buiilding a Custom Model
 
-First of all, there are two options for building a model. One is to simply use an existing one by expanding the only channel to three. Another option is to convert an existing one to embrace 1 channel image. In this note, the latter case is covered (the original architecture of DenseNet121 takes three channels).
+There are two options for building a model. One is to simply use an existing one by expanding the only channel to three. Another option is to convert an existing one to embrace 1 channel image. In this note, the latter case is covered (the original architecture of DenseNet121 takes three channels).
 
 ```python
 df      = pd.read_csv(LABELS)
 nunique = list(df.nunique())[1:-1]
 ```
+
+We have two classes. One is `Head`, and the other is `Dnet_1ch`. `Head` is a part of the `Dnet_1ch`, and `Dnet_1ch` is a modified version of DenseNet121. More specifically, `Head` is defined to be added as a fully connected layer to the end of convolutional blocks in DenseNet121. 
 
 ```python
 class Head(nn.Module):
@@ -297,6 +314,13 @@ class Dnet_1ch(nn.Module):
         
         return x1,x2,x3
 ```
+
+As you can see, `m = arch(True) if pre else arch()`, the very first line of `Dnet_1ch` class, will import DenseNet121 from PyTorch model. 
+
+From the second line to fourth line of code replaces the original DenseNet121's first convolutional layer to embrace the 1 channel image. The `nn.Conv2d` is the same, but there are only one channel input. The `weight` is simply the sum of the kernels from the original version. `nn.Parameter` makes the `wieght` learnable.
+
+Rest of the pieces until `self.head1` is the same thing. Three `Head` layer thing are added separately which means they don't share information since each one of them will classify different things simultaneously. 
+
 
 # Loss & Metrics & Callbacks
 
