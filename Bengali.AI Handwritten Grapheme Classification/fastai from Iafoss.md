@@ -201,7 +201,7 @@ The first argument `32` indicates the number of epochs. The second argument `max
 
 The third argument `pct_start` is the percentage of total number of epochs when learning rate rises during one cycle. The figure below shows an idea how the learning rate gets changed in `fit_one_cycle`. By setting `pct_start=0.0`, the peak just starts right away when the training gets started.
 
-[](./fit_one_cycle.png)
+<img src="./fit_one_cycle.png"/>
 
 The fourth argument `div_factor` sets the starting learning rate. Internally, the learning rates rise from `max_lr/div_factor` to the `max_lr`s. The default is set to 25.0.
 
