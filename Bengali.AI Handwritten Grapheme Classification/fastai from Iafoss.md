@@ -179,7 +179,9 @@ learn.split([model.head1])
 
 The third parameter `loss_func` is used to specify a loss function. A custom loss function is defined, and its name is `Loss_combine`. Bangali MNIST is a multilabel classification problem, so there should be three different outputs to be measured. `Dnet_1ch` model's output actually has three different fully connected layers separately. `Loss_combine` function simply adds up losses from those separate layers.
 
+We will see the custom metrices of `Metric_grapheme`, `Metric_vowel`, `Metric_consonant`, and `Metric_tot` shortly. Basically, each of them displays the amount of loss to the corresponding classification results. 
 
+`CSVLogger` is justa callback to leave a log file while training. It will be passed when the actual training begins. `learn.clip_grad` is a way to limit the value of gradient in order to prevent exploding gradient problem. `learn.split` is a fastai mechanism to split the whole model into groups. `model.head1` is the splitting point where the DenseNet121 part is over and additional fully connected layers are attatched.
 
 ```python
 learn.fit_one_cycle(32, 
@@ -193,8 +195,22 @@ learn.fit_one_cycle(32,
                                                    mode='max',name=f'model_{fold}')])
 ```
 
+`learn.fit_one_cycle` is a most commonly used training method in fastai. It uses a cyclical learning rate strategy behind the scene. To simply explain, the cyclical learning rate is that the learning rate starts from high, and it goes down slowly to the low value. This process happens multiple times, and each time is called a cycle. `fit_one_cycle` is a specific case of the cyclical learning rate which use only one cycle with a bit of tweak.
+
+The first argument `32` indicates the number of epochs. The second argument `max_lr` indicates the learning rates, but when we pass slice thing, it is possible to apply different learning rates to different groups of layers. Remember we have split the model into two groups by `learn.split` method before.
+
+The third argument `pct_start` is the percentage of total number of epochs when learning rate rises during one cycle. The figure below shows an idea how the learning rate gets changed in `fit_one_cycle`. By setting `pct_start=0.0`, the peak just starts right away when the training gets started.
+
+[](./fit_one_cycle.png)
+
+The fourth argument `div_factor` sets the starting learning rate. Internally, the learning rates rise from `max_lr/div_factor` to the `max_lr`s. The default is set to 25.0.
+
+The last argument is to set a number of callbacks. Callbacks in fastai lets you insert any kind of additional logic in any given points of training time. `logger` is the `CSVLogger` that we have created before. `MixUpCallback` is a data augmentation technique to mix up multiple images from multiple different kinds of labels. This helps to increase the model's generalization. `SaveModelCallback` is to save model where a certain metric has better value. This is the default look. `SaveModelCallback(learn:Learner, monitor:str='valid_loss', mode:str='auto', every:str='improvement', name:str='bestmodel')`
 
 ## Building a DataBunch
+
+`DataBunch` is a high level wrapper for PyTorch's Dataset and DataLoader. It holds training, validation, and testing(optional) datasets internally. 
+
 ```python
 stats = ([0.0692], [0.2051])
 
