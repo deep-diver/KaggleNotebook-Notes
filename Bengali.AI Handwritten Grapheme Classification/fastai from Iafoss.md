@@ -344,9 +344,32 @@ class Loss_combine(nn.Module):
                0.2*F.cross_entropy(x3,y[:,2],reduction=reduction)
 ```
 
-x1, x2, and x3 are `grapheme_root`, `vowel_diacritic`, and `consonant_diacritic` respectively. `0.7`, `0.1`, and `0.2` are weights for the different components. You could try different numbers as long as the sum of them equals to `1.0`.
+x1, x2, and x3 are `grapheme_root`, `vowel_diacritic`, and `consonant_diacritic` respectively. `0.7`, `0.1`, and `0.2` are weights for the different components. You could try different numbers as long as the sum of them equals to `1.0`. I assume  that the first one has much higher weights since `grapheme_root` has a way more classes to calssify than others. (168 vs 11 vs 7)
 
 ## Building Custom Metrics
+
+Metric is an assessment to represent how well the model is learning other than loss. Different task might require different metric or metrices. This competition asks to use hierarchical macro average recall. 
+
+> Submissions are evaluated using a hierarchical macro-averaged recall. First, a standard macro-averaged recall is calculated for each component (grapheme root, vowel diacritic, or consonant diacritic). The final score is the weighted average of those three scores, with the grapheme root given double weight. You can replicate the metric with the following python snippet:
+
+```python
+# provided code snippet from the Kaggle competition
+import numpy as np
+import sklearn.metrics
+
+scores = []
+for component in ['grapheme_root', 'consonant_diacritic', 'vowel_diacritic']:
+    y_true_subset = solution[solution[component] == component]['target'].values
+    y_pred_subset = submission[submission[component] == component]['target'].values
+    scores.append(sklearn.metrics.recall_score(
+        y_true_subset, y_pred_subset, average='macro'))
+        
+final_score = np.average(scores, weights=[2,1,1])
+```
+
+According to the official code snippet, we need to calculate a weighted average recall, and its average model macro. You might wonder mean of what. Remember that we calculate three different recall values from three different outputs for three different components (grapheme root, vowel diacritic, consonant diacritic).
+
+The follwing code exactly does this. Just forget about the detail on `Metric_idx` for now but think each one of them is the recall value for the corresponding components. `Metric_tot` whose actual name is `Metric_total` calculates the hierarchical macro-averaged recall. As you can see from the `on_epoch_end` method in it, it also reflects the requirements `The final score is the weighted average of those three scores, with the grapheme root given double weight`. The value for the grapheme_root is as twice as the others. 
 
 ```python
 Metric_grapheme     = partial(Metric_idx,0)
@@ -374,6 +397,10 @@ class Metric_tot(Callback):
         return add_metrics(last_metrics, 0.5*self.grapheme._recall() +
                 0.25*self.vowel._recall() + 0.25*self.consonant._recall())
 ```
+
+I guess this work is done to embrace `the hierarchical macro-averaged recall` thing into PyTorch. But you get the idea. Just one thing to notice is that any kind of metric is implemented as a Callback in fast.ai library which provides much flexible way to insert logics at any given point of traning phases.
+
+`Metric_tot` contains three different `Metric_idx` instances which are also a kind of Callback.
 
 ```python
 class Metric_idx(Callback):
@@ -432,6 +459,8 @@ class Metric_idx(Callback):
     def on_epoch_end(self, last_metrics, **kwargs): 
         return add_metrics(last_metrics, self._recall())
 ```
+
+I will revisit the details of the code block above later. This is an implementation detail for a specific metric. Indeed, we need this, but it is provided nicely by @Iafoss.
 
 ## Building a Custom Callback
 ```python
@@ -539,7 +568,6 @@ class MixUpCallback(LearnerCallback):
     def on_train_end(self, **kwargs):
         if self.stack_y: self.learn.loss_func = self.learn.loss_func.get_old()
 ```
-
 
 
 ## References
