@@ -534,7 +534,9 @@ class MixUpLoss(Module):
         elif hasattr(self, 'old_red'): 
             setattr(self.crit, 'reduction', self.old_red)
             return self.crit
+```
 
+```python
 class MixUpCallback(LearnerCallback):
     "Callback that creates the mixed-up input and target."
     def __init__(self, learn:Learner, alpha:float=0.4, stack_x:bool=False, stack_y:bool=True):
