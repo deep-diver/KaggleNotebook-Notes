@@ -325,6 +325,9 @@ Rest of the pieces until `self.head1` is the same thing. Three `Head` layer thin
 # Loss & Metrics & Callbacks
 
 ## Building a Custom Loss
+
+The forward pass in the `Dnet_1ch` returns three things for three different classification results. It is easy to measure the loss of the indivisual output. However, we need a way to combine all of three. One easy way to achieve this is to just add them up.
+
 ```python
 class Loss_combine(nn.Module):
     def __init__(self):
@@ -341,8 +344,38 @@ class Loss_combine(nn.Module):
                0.2*F.cross_entropy(x3,y[:,2],reduction=reduction)
 ```
 
+x1, x2, and x3 are `grapheme_root`, `vowel_diacritic`, and `consonant_diacritic` respectively. `0.7`, `0.1`, and `0.2` are weights for the different components. You could try different numbers as long as the sum of them equals to `1.0`.
+
 ## Building Custom Metrics
+
+```python
+Metric_grapheme     = partial(Metric_idx,0)
+Metric_vowel        = partial(Metric_idx,1)
+Metric_consonant    = partial(Metric_idx,2)
+
+class Metric_tot(Callback):
+    def __init__(self):
+        super().__init__()
+        self.grapheme   = Metric_idx(0)
+        self.vowel      = Metric_idx(1)
+        self.consonant  = Metric_idx(2)
+        
+    def on_epoch_begin(self, **kwargs):
+        self.    grapheme.on_epoch_begin(**kwargs)
+        self.       vowel.on_epoch_begin(**kwargs)
+        self.   consonant.on_epoch_begin(**kwargs)
+    
+    def on_batch_end(self, last_output:Tensor, last_target:Tensor, **kwargs):
+        self.    grapheme.on_batch_end(last_output, last_target, **kwargs)
+        self.       vowel.on_batch_end(last_output, last_target, **kwargs)
+        self.   consonant.on_batch_end(last_output, last_target, **kwargs)
+        
+    def on_epoch_end(self, last_metrics, **kwargs): 
+        return add_metrics(last_metrics, 0.5*self.grapheme._recall() +
+                0.25*self.vowel._recall() + 0.25*self.consonant._recall())
 ```
+
+```python
 class Metric_idx(Callback):
     def __init__(self, idx, average='macro'):
         super().__init__()
@@ -398,31 +431,6 @@ class Metric_idx(Callback):
     
     def on_epoch_end(self, last_metrics, **kwargs): 
         return add_metrics(last_metrics, self._recall())
-    
-Metric_grapheme     = partial(Metric_idx,0)
-Metric_vowel        = partial(Metric_idx,1)
-Metric_consonant    = partial(Metric_idx,2)
-
-class Metric_tot(Callback):
-    def __init__(self):
-        super().__init__()
-        self.grapheme   = Metric_idx(0)
-        self.vowel      = Metric_idx(1)
-        self.consonant  = Metric_idx(2)
-        
-    def on_epoch_begin(self, **kwargs):
-        self.    grapheme.on_epoch_begin(**kwargs)
-        self.       vowel.on_epoch_begin(**kwargs)
-        self.   consonant.on_epoch_begin(**kwargs)
-    
-    def on_batch_end(self, last_output:Tensor, last_target:Tensor, **kwargs):
-        self.    grapheme.on_batch_end(last_output, last_target, **kwargs)
-        self.       vowel.on_batch_end(last_output, last_target, **kwargs)
-        self.   consonant.on_batch_end(last_output, last_target, **kwargs)
-        
-    def on_epoch_end(self, last_metrics, **kwargs): 
-        return add_metrics(last_metrics, 0.5*self.grapheme._recall() +
-                0.25*self.vowel._recall() + 0.25*self.consonant._recall())
 ```
 
 ## Building a Custom Callback
